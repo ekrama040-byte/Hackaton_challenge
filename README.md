@@ -19,7 +19,7 @@ Ensure you have Python 3.10+ installed locally on your system architecture.
 
 ### 1. Clone the Codebase Matrix
 ```bash
-git clone https://github.com
+git clone https://github.com/ekrama040-byte/Hackaton_challenge
 cd Hackaton_challenge2
 ```
 
