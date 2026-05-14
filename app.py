@@ -1,4 +1,4 @@
-import streamlit as st
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,10 +9,120 @@ import numpy as np
 import pandas as pd
 import sqlite3
 import datetime
-import os
+import streamlit as st
 
-# 1. PLATFORM CONFIGURATION & SYSTEM INITIALIZATION
 st.set_page_config(page_title="AgriVision Sovereign Command Engine", layout="wide")
+
+# ==============================================================================
+# ADVANCED ENTERPRISE CUSTOM STYLING (CSS DESIGN LAYER)
+# ==============================================================================
+st.markdown("""
+    <style>
+        .stApp {
+            background-color: #0b0f19 !important;
+            color: #e2e8f0 !important;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        h1, h2, h3 {
+            color: #00f2fe !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            border-bottom: 1px solid rgba(0, 242, 254, 0.15);
+            padding-bottom: 8px;
+        }
+        section[data-testid="stSidebar"] {
+            background-color: #0d1527 !important;
+            border-right: 2px solid #1e293b !important;
+        }
+        div[data-testid="metric-container"] {
+            background-color: #111a2e !important;
+            border: 1px solid #1e293b !important;
+            border-left: 4px solid #00f2fe !important;
+            padding: 15px !important;
+            border-radius: 6px !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+        }
+        div[data-testid="stMetricLabel"] {
+            color: #94a3b8 !important;
+            font-size: 0.85rem !important;
+            text-transform: uppercase !important;
+            font-weight: 600 !important;
+        }
+        div[data-testid="stMetricValue"] {
+            color: #ffffff !important;
+            font-size: 1.6rem !important;
+            font-weight: 700 !important;
+        }
+        .stAlert {
+            background-color: #111a2e !important;
+            border: 1px solid #1e293b !important;
+            border-radius: 6px !important;
+        }
+        .stDataFrame, div[data-testid="stTable"] {
+            background-color: #111a2e !important;
+            border: 1px solid #1e293b !important;
+            border-radius: 6px !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# ==============================================================================
+# INDUSTRIAL EXPLAINABLE AI (GRAD-CAM) ENGINE - DIRECT TENSOR HOOK METHOD
+# ==============================================================================
+class GradientActivationMapping:
+    def __init__(self, model, target_layer):
+        self.model = model
+        self.target_layer = target_layer
+        self.gradients = None
+        self.activations = None
+        # Use only a forward hook; the backward hook is registered directly onto the tensor
+        self.target_layer.register_forward_hook(self.save_activations)
+
+    def save_activations(self, module, input, output):
+        self.activations = output.detach()
+        
+        # Foolproof Tensor Hook: Triggers on the tensor itself, always receiving a single tensor, never a tuple
+        def backward_tensor_hook(grad):
+            self.gradients = grad.detach()
+            return grad
+            
+        output.register_hook(backward_tensor_hook)
+
+    def compute_heatmap(self, input_tensor, class_idx):
+        self.gradients = None
+        self.model.zero_grad()
+        output = self.model(input_tensor)
+        score = output[0, class_idx]
+        score.backward()
+        
+        if self.gradients is None or self.activations is None:
+            return np.zeros((224, 224), dtype=np.float32)
+            
+        gradients = self.gradients.cpu().numpy()
+        activations = self.activations.cpu().numpy()
+        weights = np.mean(gradients, axis=(2, 3))
+        cam = np.zeros(activations.shape[2:], dtype=np.float32)
+        
+        for i, w in enumerate(weights[0]):
+            cam += w * activations[0, i, :, :]
+            
+        cam = np.maximum(cam, 0)
+        cam_max = np.max(cam)
+        if cam_max > 0:
+            cam = cam / cam_max
+        return cam
+
+def generate_cam_overlay(pil_image, heatmap):
+    heatmap_resized = Image.fromarray((heatmap * 255).astype(np.uint8)).resize((224, 224), resample=Image.BILINEAR)
+    heatmap_np = np.array(heatmap_resized)
+    r = heatmap_np
+    g = np.zeros_like(heatmap_np)
+    b = 255 - heatmap_np
+    heatmap_rgb = Image.fromarray(np.stack([r, g, b], axis=2))
+    raw_resized = pil_image.resize((224, 224))
+    blended_output = Image.blend(raw_resized, heatmap_rgb, alpha=0.35)
+    return np.array(blended_output)
 
 # ==============================================================================
 # ENTERPRISE PERSISTENT DATA LAYER (SQLITE3 HARDWARE BOUND)
@@ -39,6 +149,29 @@ def init_db():
 db_conn = init_db()
 
 # ==============================================================================
+# INDUSTRIAL GENERATIVE AGRO-COPILOT DICTIONARY
+# ==============================================================================
+def get_agronomist_advice(disease_name, total_kg, cost, vpd):
+    parts = disease_name.split("___")
+    crop = parts[0].replace("_", " ") if len(parts) > 0 else "Crop Tissue"
+    condition = parts[1].replace("_", " ") if len(parts) > 1 else "Unknown Matrix Condition"
+    
+    if "healthy" in condition.lower():
+        return {
+            "pathogen": f"None Detected ({crop} Matrix Stable)",
+            "symptoms": f"Uniform chlorophyll distribution across {crop} foliage. Cellular respiration nominal.",
+            "transmission": f"Microclimate air metrics (VPD: {vpd:.2f} kPa) are currently maintaining physiological balance.",
+            "strategy": "No aggressive chemical intervention needed. Maintain baseline soil nitrogen feeding profiles."
+        }
+        
+    return {
+        "pathogen": f"Active Pathogen Spore/Cell Micro-colonies hitting local {crop} vascular sectors.",
+        "symptoms": f"Necrotic lesion formatting clusters, spotting, or leaf rust anomalies matching {condition}.",
+        "transmission": f"Pathogen reproduction track high. Localized vapor deficit ({vpd:.2f} kPa) speeds up vector spreads.",
+        "strategy": f"Deploy chemical mitigation treatments immediately. Apply {total_kg:.2f} total units at a procurement supply-line cost of ${cost:.2f}."
+    }
+
+# ==============================================================================
 # GATEWAY LAYER: INDUSTRIAL INPUT VALIDATION MASK
 # ==============================================================================
 @st.cache_resource
@@ -53,59 +186,22 @@ filter_node, imagenet_classes = load_validation_filter()
 def verify_agricultural_integrity(img):
     preprocess = models.MobileNet_V3_Small_Weights.DEFAULT.transforms()
     input_tensor = preprocess(img).unsqueeze(0)
-    
     with torch.no_grad():
         logits = filter_node(input_tensor)
         probabilities = F.softmax(logits, dim=1).squeeze().numpy()
-        
     top5_indices = np.argsort(probabilities)[-5:][::-1]
-    top1_idx = top5_indices[0]
-    top1_label = imagenet_classes[top1_idx].lower()
-    top1_confidence = probabilities[top1_idx]
+    
+    top1_label = imagenet_classes[top5_indices[0]].lower()
     
     explicit_violations = ["identity card", "passport", "web site", "website", "screen", "monitor", "car", "truck"]
-    if any(violation in top1_label for violation in explicit_violations):
-        return False, top1_label, top1_confidence
-
-    if top1_confidence < 0.40:
-        return True, "Ambiguous Plant Anomaly (Passed Filter)", top1_confidence
+    if any(v in top1_label for v in explicit_violations):
+        return False, top1_label, probabilities[top5_indices[0]]
         
-    valid_keywords = [
-        "leaf", "plant", "corn", "maize", "tree", "vegetable", "grass", "pot", 
-        "turnip", "hay", "field", "wood", "earth", "organism", "bittern", "fungus",
-        "chameleon", "lizard", "gecko", "iguana", "mantis", "caterpillar", "insect"
-    ]
-    
+    valid_keywords = ["leaf", "plant", "crop", "corn", "maize", "tree", "vegetable", "grass", "pot", "fungus", "chameleon", "lizard", "bittern"]
     for idx in top5_indices:
-        label = imagenet_classes[idx].lower()
-        if any(keyword in label for keyword in valid_keywords):
-            return True, label, probabilities[idx]
-            
-    return False, top1_label, top1_confidence
-
-# ==============================================================================
-# INDUSTRIAL GENERATIVE AGRO-COPILOT DICTIONARY (PlantVillage Mapping)
-# ==============================================================================
-def get_agronomist_advice(disease_name, total_kg, cost, vpd):
-    # FIX: Correctly access string indices from the split array list
-    parts = disease_name.split("___")
-    crop = parts[0].replace("_", " ") if len(parts) > 0 else "Crop Tissue"
-    condition = parts[1].replace("_", " ") if len(parts) > 1 else "Unknown Target Metric"
-    
-    if "healthy" in condition.lower():
-        return {
-            "pathogen": f"None Detected ({crop} Matrix Stable)",
-            "symptoms": f"Uniform chlorophyll distribution across {crop} surfaces. Optimal cell walls.",
-            "transmission": f"Microclimate conditions (VPD: {vpd:.2f} kPa) are currently maintaining physiological balance.",
-            "strategy": "No chemical intervention needed. Maintain baseline soil nitrogen feeding schedules."
-        }
-        
-    return {
-        "pathogen": f"Active Pathogen Colonies affecting {crop} tissue groups.",
-        "symptoms": f"Necrotic lesion clusters, spotting, or mildew patches consistent with {condition}.",
-        "transmission": f"Spore germination risk high. Ambient air pressure deficit ({vpd:.2f} kPa) accelerates spread.",
-        "strategy": f"Deploy targeted treatments immediately. Apply {total_kg:.2f} total units at an estimated material procurement cost of ${cost:.2f}."
-    }
+        if any(kw in imagenet_classes[idx].lower() for kw in valid_keywords):
+            return True, imagenet_classes[idx].lower(), probabilities[idx]
+    return False, top1_label, probabilities[top5_indices[0]]
 
 # ==============================================================================
 # CORE SYSTEM ENGINE: MULTI-CLASS TRANSFER LEARNING MODEL BLOCK
@@ -125,238 +221,124 @@ PLANTVILLAGE_CLASSES = [
 ]
 
 @st.cache_resource
-def load_sovereign_engine():
-    weights = models.MobileNet_V3_Small_Weights.DEFAULT
-    model = models.mobilenet_v3_small(weights=weights)
-    in_features = model.classifier[0].in_features
-    
+def load_trained_sovereign_engine():
+    model = models.mobilenet_v3_small()
     model.classifier = nn.Sequential(
-        nn.Linear(in_features, 1024),
+        nn.Linear(576, 1024),
         nn.Hardswish(),
         nn.Dropout(p=0.2, inplace=True),
-        nn.Linear(1024, len(PLANTVILLAGE_CLASSES))
+        nn.Linear(1024, 38)
     )
+
+    weights_path = "models/plant_disease_model.pth"
+    if os.path.exists(weights_path):
+        try:
+            model.load_state_dict(torch.load(weights_path, map_location=torch.device('cpu')))
+            st.sidebar.success("⚡ AgriVision Core Engine Activated: Trained Weights Embedded.")
+        except Exception as e:
+            st.sidebar.error(f"❌ Structural loading mismatch error: {e}")
+    else:
+        st.sidebar.warning("⚠️ Weights file missing. Operating on baseline untrained model.")
+        
     model.eval()
     return model
 
-model = load_sovereign_engine()
+sovereign_engine = load_trained_sovereign_engine()
 
 # ==============================================================================
-# PREMIUM CYBERPUNK CSS STYLE RE-ENGINEERING
+# FRONTEND USER INTERFACE RENDER BLOCK
 # ==============================================================================
-st.markdown("""
-<style>
-    html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
-        background-color: #020617 !important;
-        color: #f8fafc !important;
-        font-family: 'Plus Jakarta Sans', sans-serif !important;
-    }
-    [data-testid="stSidebar"] {
-        background-color: #090d16 !important;
-        border-right: 1px solid #1e293b !important;
-    }
-    .sovereign-banner {
-        background: linear-gradient(135deg, #064e3b 0%, #020617 50%, #1e1b4b 100%);
-        border: 1px solid #10b981;
-        border-radius: 16px;
-        padding: 35px;
-        text-align: center;
-        margin-bottom: 25px;
-        box-shadow: 0 20px 40px rgba(0,0,0,0.5);
-    }
-    .grid-card {
-        background-color: #0f172a !important;
-        border: 1px solid #1e293b !important;
-        border-radius: 14px;
-        padding: 24px;
-        margin-bottom: 20px;
-    }
-    .ai-box {
-        background: linear-gradient(180deg, #1e1b4b 0%, #0f172a 100%);
-        border: 1px solid #4338ca;
-        border-radius: 12px;
-        padding: 20px;
-        margin-top: 15px;
-    }
-</style>
-""", unsafe_allow_html=True)
+st.title("🛰️ AgriVision Sovereign Command Engine")
 
-# ==============================================================================
-# SIDEBAR ENVIRONMENT INTERFACES & MARKET RATE DATA TABLES
-# ==============================================================================
-st.sidebar.markdown("### 🛰️ Ambient Telemetry Controls")
-field_size = st.sidebar.number_input("Field Matrix Scale (Hectares)", min_value=0.1, max_value=1000.0, value=12.5)
-ph_metric = st.sidebar.slider("Sector Soil pH Level", min_value=4.0, max_value=9.0, value=6.2)
+# Sidebar Controls
+st.sidebar.header("Telemetry Calibration Controls")
+field_scale = st.sidebar.slider("Field Operational Scale (Hectares)", 0.5, 50.0, 5.0, step=0.5)
+soil_ph = st.sidebar.slider("Current Ground Soil pH Metric", 4.0, 9.0, 6.5, step=0.1)
+air_vpd = st.sidebar.slider("Microclimate Vapor Pressure Deficit (VPD - kPa)", 0.1, 3.5, 1.2, step=0.1)
 
-st.sidebar.markdown("### 🧪 Model Training Simulator")
-model_override = st.sidebar.selectbox(
-    "Force Target Diagnostic Output", 
-    ["Force Tomato Late Blight", "Force Corn Common Rust", "Auto (Use Engine Probabilities)"]
-)
+col1, col2 = st.columns(2)
 
-st.sidebar.markdown("### 💰 Chemical Contract Procurement Rates")
-price_treatment = st.sidebar.number_input("Standard Compound Treatment Cost (\$ / Kg)", value=18.50)
-
-# ==============================================================================
-# MAIN DASHBOARD INTERFACE CONTAINER
-# ==============================================================================
-st.markdown("""
-<div class="sovereign-banner">
-    <span style="letter-spacing: 0.3em; font-size: 0.85rem; color: #34d399; font-weight:700;">SOVEREIGN AUTOMATION COMMAND</span>
-    <h1 style="color: #10b981; margin: 5px 0; font-size: 2.8rem; font-weight: 900;">AGRIVISION SOVEREIGN COMMAND</h1>
-    <p style="color: #94a3b8; margin: 0; font-size: 1.1rem;">Fusing Explainable AI Heatmaps, Microclimate Telemetry, and Persistent SQL Data Matrices</p>
-</div>
-""", unsafe_allow_html=True)
-
-inference_tab, ledger_tab = st.tabs(["🔍 Sovereign Inference Terminal", "🗄️ Persistent Database Records"])
-
-# ==============================================================================
-# TAB 1: MODEL INFERENCE TERMINAL PIPELINE
-# ==============================================================================
-with inference_tab:
-    col1, col2 = st.columns(2)
+with col1:
+    st.header("📸 Visual Target Capture")
+    uploaded_file = st.file_uploader("Upload Leaf Sample Matrix File...", type=["jpg", "jpeg", "png"])
     
-    with col1:
-        st.markdown('<div class="grid-card"><h3 style="margin-top:0; color:#10b981;">📸 Visual Target Capture</h3></div>', unsafe_allow_html=True)
-        uploaded_file = st.file_uploader("Upload leaf sample matrix file...", type=["jpg", "jpeg", "png", "jfif"])
+    if uploaded_file is not None:
+        raw_image = Image.open(uploaded_file).convert("RGB")
+        st.image(raw_image, caption="Target Asset Sample Matrix Loaded.", use_container_width=True)
         
-        st.markdown('<div class="grid-card"><h4 style="margin-top:0; color:#34d399;">🌡️ Localized Canopy Telemetry Fusion</h4></div>', unsafe_allow_html=True)
-        sim_temp = 28.4
-        sim_humidity = 76.2
-        es = 0.61078 * np.exp((17.27 * sim_temp) / (sim_temp + 237.3))
-        ea = es * (sim_humidity / 100.0)
-        vpd = es - ea
+        is_valid, matched_lbl, integrity_score = verify_agricultural_integrity(raw_image)
         
-        m_col1, m_col2, m_col3 = st.columns(3)
-        m_col1.metric("Canopy Temp", f"{sim_temp}°C")
-        m_col2.metric("Relative Humidity", f"{sim_humidity}%")
-        m_col3.metric("Calculated VPD Air Deficit", f"{vpd:.2f} kPa")
-
-        if uploaded_file is not None:
-            raw_img = Image.open(uploaded_file).convert("RGB")
-            is_valid_plant, detected_object, filter_conf = verify_agricultural_integrity(raw_img)
+        if not is_valid:
+            st.error(f"⚠️ Validation Layer Warning: Asset rejected. Mismatched profile: ({matched_lbl})")
+        else:
+            st.success(f"✅ Validation Layer Passed: Confirmed plant foliage. ({matched_lbl} Match Score: {integrity_score:.2f})")
             
-            transform = transforms.Compose([
+            preprocess_transform = transforms.Compose([
                 transforms.Resize((224, 224)),
                 transforms.ToTensor(),
                 transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
             ])
-            img_tensor = transform(raw_img).unsqueeze(0)
-        else:
-            img_tensor = None
-            is_valid_plant = False
-            detected_object = ""
-
-    with col2:
-        st.markdown('<div class="grid-card"><h3 style="margin-top:0; color:#10b981;">🧠 Explainable AI Diagnostic Matrix</h3></div>', unsafe_allow_html=True)
-        
-        if img_tensor is not None:
-            if not is_valid_plant:
-                st.error("🚨 **Input Validation Intercept Failure!**")
-                st.warning(f"Object classified as an index profile: **[{detected_object.upper()}]** (Certainty: {filter_conf*100:.1f}%)")
-                st.info("The execution engine blocks non-crop data inputs like ID cards, individuals, or documents to prevent database pollution.")
-            else:
-                with torch.no_grad():
-                    logits = model(img_tensor)
-                    probs = F.softmax(logits, dim=1).squeeze().numpy()
-                
-                if model_override == "Force Tomato Late Blight":
-                    max_idx = PLANTVILLAGE_CLASSES.index("Tomato___Late_blight")
-                    confidence = 96.40
-                elif model_override == "Force Corn Common Rust":
-                    max_idx = PLANTVILLAGE_CLASSES.index("Corn___Common_rust")
-                    confidence = 98.15
-                else:
-                    max_idx = np.argmax(probs)
-                    confidence = probs[max_idx] * 100
-                    
-                verdict = PLANTVILLAGE_CLASSES[max_idx]
-                
-                if "healthy" in verdict.lower():
-                    base_rate_per_hectare = 0.0
-                else:
-                    base_rate_per_hectare = 5.2 
-                    
-                total_required_amount = base_rate_per_hectare * field_size
-                if ph_metric < 5.8 and "healthy" not in verdict.lower():
-                    total_required_amount *= 1.15 
-                    
-                total_cost = total_required_amount * price_treatment
-                
-                st.success(f"✓ Input verification cleared. Plant matter confirmed. (Target Match: {detected_object})")
-                st.metric("Inferred Disease Vector (PlantVillage ID)", verdict.replace("___", " -> "))
-                st.metric("Estimated Total Input Requirement", f"{total_required_amount:.2f} Total Kg", delta=f"${total_cost:.2f} Procurement Cost")
-                
-                ai_report = get_agronomist_advice(verdict, total_required_amount, total_cost, vpd)
-                
-                st.markdown(f"""
-                <div class="ai-box">
-                    <h4 style="margin:0 0 10px 0; color:#818cf8; font-weight:800;">🤖 EMBEDDED AGRONOMIST CO-PILOT</h4>
-                    <p style="margin-bottom:8px;"><b>🔬 Biological Pathogen ID:</b> {ai_report['pathogen']}</p>
-                    <p style="margin-bottom:8px;"><b>📋 Clinical Symptom Profile:</b> {ai_report['symptoms']}</p>
-                    <p style="margin-bottom:8px;"><b>📡 Microclimate Transmission Vector:</b> {ai_report['transmission']}</p>
-                    <p style="margin-bottom:0; color:#34d399;"><b>⚡ Prescription Mitigation Strategy:</b> {ai_report['strategy']}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                st.write("#### 🗺️ Localized Pixel Target Activation Map (Grad-CAM):")
-                img_np = np.array(raw_img.resize((256, 256)))
-                
-                x, y = np.meshgrid(np.linspace(-1, 1, 256), np.linspace(-1, 1, 256))
-                dst = np.sqrt(x*x + y*y)
-                is_diseased = "healthy" not in verdict.lower()
-                
-                # FIX: Cleaned syntax error parameter target
-                gauss_mask = np.exp(-(dst**2 / (2.0 * 0.4**2))) if is_diseased else np.zeros((256, 256))
-                
-                heatmap = np.uint8(255 * gauss_mask)
-                cam_overlay = np.copy(img_np)
-                if is_diseased:
-                    cam_overlay[:, :, 0] = np.clip(cam_overlay[:, :, 0] + heatmap * 0.7, 0, 255)
-                    
-                st.image(cam_overlay, caption="Grad-CAM Focus Map: Highlighted Regions Indicate Potential Pathogen Biomass", use_container_width=True)
-                
-                if st.button("💾 Commit Spatial Scans to Database Ledger"):
-                    cursor = db_conn.cursor()
-                    cursor.execute("""
-                        INSERT INTO field_telemetry (timestamp, condition, confidence, hectares, soil_ph, vpd, required_kg, procurement_cost)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        verdict, round(confidence, 2), field_size, ph_metric, round(vpd, 2), round(total_required_amount, 2), round(total_cost, 2)
-                    ))
-                    db_conn.commit()
-                    st.success("✓ Transaction securely saved to persistent SQLite3 data matrix.")
-        else:
-            st.warning("Diagnostic processing core idle. Upload an image to initialize system telemetry pipelines.")
-
-# ==============================================================================
-# TAB 2: PERSISTENT DATABASE LOG LEDGER
-# ==============================================================================
-with ledger_tab:
-    st.markdown('<div class="grid-card"><h3 style="margin-top:0; color:#10b981;">🗄️ Sovereign Fleet SQL Ledger Database</h3><p style="color:#94a3b8; font-size:0.9rem;">Persistent historical tracking database record array. Transactions remain stored securely across core processing shutdowns.</p></div>', unsafe_allow_html=True)
-    
-    try:
-        df_records = pd.read_sql_query("SELECT * FROM field_telemetry ORDER BY id DESC", db_conn)
-        if not df_records.empty:
-            st.dataframe(df_records, use_container_width=True)
-            csv_buffer = df_records.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Export SQL Records to CSV",
-                data=csv_buffer,
-                file_name="sovereign_fleet_telemetry.csv",
-                mime="text/csv"
-            )
-        else:
-            st.info("Sovereign database ledger is currently blank. Execute and commit diagnostic entries in Tab 1.")
+            input_tensor = preprocess_transform(raw_image).unsqueeze(0)
+            input_tensor.requires_grad = True
             
-        st.markdown("---")
-        if st.button("🗑️ Reset Fleet Database Log Ledger"):
+            # Extract the final convolutional block layer from the feature extractor
+            target_conv_layer = sovereign_engine.features[-1]
+            grad_cam = GradientActivationMapping(sovereign_engine, target_conv_layer)
+            
+            outputs = sovereign_engine(input_tensor)
+            probabilities = F.softmax(outputs, dim=1).squeeze().detach().numpy()
+            predicted_class_idx = np.argmax(probabilities)
+            predicted_class_name = PLANTVILLAGE_CLASSES[predicted_class_idx]
+            confidence_level = probabilities[predicted_class_idx]
+            
+            required_units = float(field_scale * 14.5)
+            procurement_cost = float(required_units * 18.5)
+            
             cursor = db_conn.cursor()
-            cursor.execute("DELETE FROM field_telemetry")
+            cursor.execute("""
+                INSERT INTO field_telemetry (timestamp, condition, confidence, hectares, soil_ph, vpd, required_kg, procurement_cost)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                predicted_class_name, float(confidence_level), float(field_scale), float(soil_ph), float(air_vpd), required_units, procurement_cost
+            ))
             db_conn.commit()
-            st.success("✓ Fleet data storage table purged completely.")
-            st.rerun()
             
-    except Exception as e:
-        st.error(f"⚠️ Telemetry processing exception error trace: {e}")
+            st.subheader("🔬 Diagnostic Evaluation Matrix")
+            m_col1, m_col2 = st.columns(2)
+            with m_col1:
+                st.metric(label="Identified Crop Condition", value=predicted_class_name.replace("___", " → "))
+            with m_col2:
+                st.metric(label="Predictive Confidence Profile", value=f"{confidence_level*100:.2f}%")
+            
+            heatmap_mask = grad_cam.compute_heatmap(input_tensor, predicted_class_idx)
+            cam_overlay_img = generate_cam_overlay(raw_image, heatmap_mask)
+            
+            st.subheader("🗺️ Explainable AI Heatmap Focus")
+            st.image(cam_overlay_img, caption="Grad-CAM Layer Target Focus Breakdown Map.", use_container_width=True)
+
+with col2:
+    st.header("📋 Tactical Logistics & Guidance")
+    if uploaded_file is not None and is_valid:
+        copilot_advice = get_agronomist_advice(predicted_class_name, required_units, procurement_cost, air_vpd)
+        
+        st.subheader("🤖 EMBEDDED AGRONOMIST CO-PILOT")
+        st.info(f"🔬 **Biological Pathogen ID:** {copilot_advice['pathogen']}")
+        st.info(f"📋 **Clinical Symptom Profile:** {copilot_advice['symptoms']}")
+        st.info(f"💨 **Vector Vectoring Dynamics:** {copilot_advice['transmission']}")
+        st.info(f"⚡ **Prescription Mitigation Strategy:** {copilot_advice['strategy']}")
+        
+        st.subheader("📊 Supply Chain Projections")
+        p_col1, p_col2 = st.columns(2)
+        with p_col1:
+            st.metric(label="Total Weight Requirement", value=f"{required_units:.2f} Kg")
+        with p_col2:
+            st.metric(label="Calculated Procurement Cost", value=f"${procurement_cost:.2f}")
+    else:
+        st.info("Awaiting structural crop matrix validation signals to compile guidance reports.")
+
+# Data Matrix Logs History Display Panel
+st.subheader("⏳ Persistent Field Telemetry Ledger Log History (SQLite)")
+df_history = pd.read_sql_query("SELECT * FROM field_telemetry ORDER BY id DESC LIMIT 10", db_conn)
+st.dataframe(df_history, use_container_width=True)
+
