@@ -63,6 +63,7 @@ def verify_agricultural_integrity(img):
     top1_label = imagenet_classes[top1_idx].lower()
     top1_confidence = probabilities[top1_idx]
     
+    # Strict validation keywords checking for leaf, plant, or vegetable traits
     explicit_violations = ["identity card", "passport", "web site", "website", "screen", "monitor", "car", "truck"]
     if any(violation in top1_label for violation in explicit_violations):
         return False, top1_label, top1_confidence
@@ -72,8 +73,7 @@ def verify_agricultural_integrity(img):
         
     valid_keywords = [
         "leaf", "plant", "corn", "maize", "tree", "vegetable", "grass", "pot", 
-        "turnip", "hay", "field", "wood", "earth", "organism", "bittern", "fungus",
-        "chameleon", "lizard", "gecko", "iguana", "mantis", "caterpillar", "insect"
+        "turnip", "hay", "field", "wood", "earth", "organism", "bittern", "fungus"
     ]
     
     for idx in top5_indices:
@@ -87,10 +87,9 @@ def verify_agricultural_integrity(img):
 # INDUSTRIAL GENERATIVE AGRO-COPILOT DICTIONARY (PlantVillage Mapping)
 # ==============================================================================
 def get_agronomist_advice(disease_name, total_kg, cost, vpd):
-    # FIX: Correctly access string indices from the split array list
     parts = disease_name.split("___")
-    crop = parts[0].replace("_", " ") if len(parts) > 0 else "Crop Tissue"
-    condition = parts[1].replace("_", " ") if len(parts) > 1 else "Unknown Target Metric"
+    crop = parts[0].replace("_", " ")
+    condition = parts[1].replace("_", " ") if len(parts) > 1 else "Unknown Matrix Condition"
     
     if "healthy" in condition.lower():
         return {
@@ -110,6 +109,7 @@ def get_agronomist_advice(disease_name, total_kg, cost, vpd):
 # ==============================================================================
 # CORE SYSTEM ENGINE: MULTI-CLASS TRANSFER LEARNING MODEL BLOCK
 # ==============================================================================
+# 38 Industry classes matched to the global PlantVillage standard dataset
 PLANTVILLAGE_CLASSES = [
     "Apple___Apple_scab", "Apple___Black_rot", "Apple___Cedar_apple_rust", "Apple___healthy",
     "Blueberry___healthy", "Cherry___Powdery_mildew", "Cherry___healthy", "Corn___Cercospora_leaf_spot",
@@ -126,16 +126,12 @@ PLANTVILLAGE_CLASSES = [
 
 @st.cache_resource
 def load_sovereign_engine():
+    # Load Google's ultra-optimized MobileNetV3 architecture
     weights = models.MobileNet_V3_Small_Weights.DEFAULT
     model = models.mobilenet_v3_small(weights=weights)
-    in_features = model.classifier[0].in_features
-    
-    model.classifier = nn.Sequential(
-        nn.Linear(in_features, 1024),
-        nn.Hardswish(),
-        nn.Dropout(p=0.2, inplace=True),
-        nn.Linear(1024, len(PLANTVILLAGE_CLASSES))
-    )
+    in_features = model.classifier[3].in_features
+    # Expand output nodes from 1000 standard classes to exactly 38 agricultural classes
+    model.classifier[3] = nn.Linear(in_features, len(PLANTVILLAGE_CLASSES))
     model.eval()
     return model
 
@@ -188,10 +184,10 @@ st.sidebar.markdown("### 🛰️ Ambient Telemetry Controls")
 field_size = st.sidebar.number_input("Field Matrix Scale (Hectares)", min_value=0.1, max_value=1000.0, value=12.5)
 ph_metric = st.sidebar.slider("Sector Soil pH Level", min_value=4.0, max_value=9.0, value=6.2)
 
-st.sidebar.markdown("### 🧪 Model Training Simulator")
+st.sidebar.markdown("### 🧪 Production Target Overrides")
 model_override = st.sidebar.selectbox(
-    "Force Target Diagnostic Output", 
-    ["Force Tomato Late Blight", "Force Corn Common Rust", "Auto (Use Engine Probabilities)"]
+    "Simulate Labeled Disease Vector Output", 
+    ["Auto (Use Engine Probabilities)", "Force Tomato Late Blight", "Force Corn Common Rust"]
 )
 
 st.sidebar.markdown("### 💰 Chemical Contract Procurement Rates")
@@ -218,7 +214,7 @@ with inference_tab:
     
     with col1:
         st.markdown('<div class="grid-card"><h3 style="margin-top:0; color:#10b981;">📸 Visual Target Capture</h3></div>', unsafe_allow_html=True)
-        uploaded_file = st.file_uploader("Upload leaf sample matrix file...", type=["jpg", "jpeg", "png", "jfif"])
+        uploaded_file = st.file_uploader("Upload leaf sample matrix file...", type=["jpg", "jpeg", "png"])
         
         st.markdown('<div class="grid-card"><h4 style="margin-top:0; color:#34d399;">🌡️ Localized Canopy Telemetry Fusion</h4></div>', unsafe_allow_html=True)
         sim_temp = 28.4
@@ -238,8 +234,7 @@ with inference_tab:
             
             transform = transforms.Compose([
                 transforms.Resize((224, 224)),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                transforms.ToTensor()
             ])
             img_tensor = transform(raw_img).unsqueeze(0)
         else:
@@ -251,11 +246,13 @@ with inference_tab:
         st.markdown('<div class="grid-card"><h3 style="margin-top:0; color:#10b981;">🧠 Explainable AI Diagnostic Matrix</h3></div>', unsafe_allow_html=True)
         
         if img_tensor is not None:
+            # 🛑 GATEWAY INTERCEPT BLOCK
             if not is_valid_plant:
                 st.error("🚨 **Input Validation Intercept Failure!**")
                 st.warning(f"Object classified as an index profile: **[{detected_object.upper()}]** (Certainty: {filter_conf*100:.1f}%)")
                 st.info("The execution engine blocks non-crop data inputs like ID cards, individuals, or documents to prevent database pollution.")
             else:
+                # 🔓 SAFE PIPELINE: Executes only if plant integrity check passes
                 with torch.no_grad():
                     logits = model(img_tensor)
                     probs = F.softmax(logits, dim=1).squeeze().numpy()
@@ -272,21 +269,23 @@ with inference_tab:
                     
                 verdict = PLANTVILLAGE_CLASSES[max_idx]
                 
+                # Active volumetric calculation logic loops
                 if "healthy" in verdict.lower():
                     base_rate_per_hectare = 0.0
                 else:
-                    base_rate_per_hectare = 5.2 
+                    base_rate_per_hectare = 5.2 # Standard application rate coefficient
                     
                 total_required_amount = base_rate_per_hectare * field_size
                 if ph_metric < 5.8 and "healthy" not in verdict.lower():
-                    total_required_amount *= 1.15 
+                    total_required_amount *= 1.15 # Compensate for soil absorption loss
                     
                 total_cost = total_required_amount * price_treatment
                 
-                st.success(f"✓ Input verification cleared. Plant matter confirmed. (Target Match: {detected_object})")
+                st.success("✓ Input integrity verification cleared. Plant matter confirmed.")
                 st.metric("Inferred Disease Vector (PlantVillage ID)", verdict.replace("___", " -> "))
                 st.metric("Estimated Total Input Requirement", f"{total_required_amount:.2f} Total Kg", delta=f"${total_cost:.2f} Procurement Cost")
                 
+                # Dynamic Generative Advisory Synthesis Output Card
                 ai_report = get_agronomist_advice(verdict, total_required_amount, total_cost, vpd)
                 
                 st.markdown(f"""
@@ -305,8 +304,6 @@ with inference_tab:
                 x, y = np.meshgrid(np.linspace(-1, 1, 256), np.linspace(-1, 1, 256))
                 dst = np.sqrt(x*x + y*y)
                 is_diseased = "healthy" not in verdict.lower()
-                
-                # FIX: Cleaned syntax error parameter target
                 gauss_mask = np.exp(-(dst**2 / (2.0 * 0.4**2))) if is_diseased else np.zeros((256, 256))
                 
                 heatmap = np.uint8(255 * gauss_mask)
@@ -336,27 +333,19 @@ with inference_tab:
 with ledger_tab:
     st.markdown('<div class="grid-card"><h3 style="margin-top:0; color:#10b981;">🗄️ Sovereign Fleet SQL Ledger Database</h3><p style="color:#94a3b8; font-size:0.9rem;">Persistent historical tracking database record array. Transactions remain stored securely across core processing shutdowns.</p></div>', unsafe_allow_html=True)
     
-    try:
-        df_records = pd.read_sql_query("SELECT * FROM field_telemetry ORDER BY id DESC", db_conn)
-        if not df_records.empty:
-            st.dataframe(df_records, use_container_width=True)
-            csv_buffer = df_records.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Export SQL Records to CSV",
-                data=csv_buffer,
-                file_name="sovereign_fleet_telemetry.csv",
-                mime="text/csv"
-            )
-        else:
-            st.info("Sovereign database ledger is currently blank. Execute and commit diagnostic entries in Tab 1.")
-            
-        st.markdown("---")
-        if st.button("🗑️ Reset Fleet Database Log Ledger"):
-            cursor = db_conn.cursor()
-            cursor.execute("DELETE FROM field_telemetry")
-            db_conn.commit()
-            st.success("✓ Fleet data storage table purged completely.")
-            st.rerun()
-            
-    except Exception as e:
-        st.error(f"⚠️ Telemetry processing exception error trace: {e}")
+    df_records = pd.read_sql_query("SELECT * FROM field_telemetry ORDER BY id DESC", db_conn)
+    
+    if not df_records.empty:
+        st.dataframe(df_records, use_container_width=True)
+        
+        csv_buffer = df_records.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Export SQL Records to CSV",
+            data=csv_buffer,
+            file_name="sovereign_fleet_telemetry.csv",
+            mime="text/csv"
+        )
+    else:
+        st.info("Sovereign database ledger is currently blank. Execute and commit diagnostic entries in Tab 1.")
+
+
